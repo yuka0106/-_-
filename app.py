@@ -7,7 +7,7 @@ st.set_page_config(page_title="「こだわる」語義自動分類ツール", l
 st.title("🔍 「こだわる」用例 自動分類ツール")
 st.write("BCCWJ等のコーパスデータから、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
 
-# --- 判定ロジック関数（複数列の結合テキストに対応） ---
+# --- 判定ロジック関数（CとDの判定を適正化） ---
 def classify_text_string(combined_text):
     # 欠損値対策と、「|（縦棒）」・全角半角スペースの完全除去
     clean_text = str(combined_text).replace('|', '').replace(' ', ' ').strip() if pd.notna(combined_text) else ""
@@ -31,20 +31,23 @@ def classify_text_string(combined_text):
         if any(k in search_target for k in ['ジャンル', 'ブランド', 'メーカー', '性別', '年齢', '国籍', '問わず', '関係なく', '一律']):
             return 'D（現代的用法・包括的）', '制限を設けない包括的・機能語的表現を検出', clean_text
 
+    # ポジティブ・追求に関するキーワード（グルメ、品質、素材など）
     d_keywords = [
-        '品質', '味', '素材', '本物', '住まい', 'デザイン', 'こだわりたい', 'こだわりを深め', 
-        '追求', '厳選', '職人', '徹底', 'とことん', '美味し', 'おいし', '上質', '独自', '洗練'
+        '品質', '味', '素材', '食材', '本物', '住まい', 'デザイン', 'こだわりたい', 'こだわりを深め', 
+        '追求', '厳選', '職人', '徹底', 'とことん', '美味し', 'おいし', '上質', '独自', '洗練',
+        '絶品', '料理', '自家製', '手作り', 'プロ'
     ]
     if any(k in search_target for k in d_keywords):
         return 'D（現代的用法・ポジティブ）', '肯定的な追求・品質重視に関するキーワードを検出', clean_text
 
     # 【ステップ4】語義C：近代的用法（ネガティブ・拘泥・囚われ）
+    # ※単なる「こだわって」ではなく、明確な否定・執着ワードがある場合のみCにする
     c_keywords = [
         '過去', '因習', '些細', '形式', '肩書', '立場', 'こだわりすぎ', '身動き', 
         '拘泥', '囚われ', '縛られ', '否定的', 'ばかり', 'つまらぬ', '不要な', '悪癖',
         '泥拘', 'われ囚'
     ]
-    if any(k in search_target for k in c_keywords) or 'こだわっ' in clean_text:
+    if any(k in search_target for k in c_keywords):
         return 'C（近代的用法・ネガティブ）', '否定的な執着や枠組み（因習・過去・形式・拘泥等）を検出', clean_text
 
     # どのキーワードにも引っかからない場合
@@ -57,8 +60,8 @@ tab1, tab2 = st.tabs(["✍️ 直接入力して判定", "📁 ファイル一�
 # 【タブ1】直接入力モード
 with tab1:
     st.subheader("文章を直接入力して検証する")
-    user_text = st.text_area("「こだわる」を含む文例を入力してください:", placeholder="例：自我の力弱い人だとか、自分の否定的な面にばかりこだわっている、など")
-    user_complement = st.text_input("補語や対象があれば入力してください（任意）:", placeholder="例：面")
+    user_text = st.text_area("「こだわる」を含む文例を入力してください:", placeholder="例：プロが食材にこだわって作った絶品チャーハン")
+    user_complement = st.text_input("補語や対象があれば入力してください（任意）:", placeholder="例：食材")
     
     if st.button("判定する", key="direct_button"):
         if user_text.strip() == "":
@@ -109,7 +112,6 @@ with tab2:
             if st.button("🚀 一括自動分類を実行する", key="file_button"):
                 results = []
                 for idx, row in df.iterrows():
-                    # 選択された列のテキストを安全に取得して結合する
                     texts_to_combine = []
                     for c in [col_a, col_b, col_c]:
                         if c != "なし" and pd.notna(row[c]):
