@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import io
 
-# 画面タイトルの設定
-st.set_page_config(page_title="「こだわる」語義自動分類ツール", layout="wide")
+# 画面タイトルの設定（スマホでも見やすいように centered にするか、レイアウトを最適化）
+st.set_page_config(page_title="「こだわる」語義自動分類ツール", layout="centered")
 st.title("🔍 「こだわる」用例 自動分類ツール")
 st.write("BCCWJやその他のテキストデータから、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
 
@@ -40,7 +40,7 @@ def classify_text_string(text, complement=""):
 
 
 # --- タブの作成（① 直接入力、② ファイル一括処理） ---
-tab1, tab2 = st.tabs(["✍️ 用例を直接入力して判定", "📁 ファイル（CSV/Excel）を一括処理"])
+tab1, tab2 = st.tabs(["✍️ 直接入力して判定", "📁 ファイル一括処理"])
 
 # 【タブ1】直接入力モード
 with tab1:
@@ -70,7 +70,7 @@ with tab1:
 
 # 【タブ2】ファイル一括処理モード
 with tab2:
-    uploaded_file = st.file_uploader("エクセルまたはCSVファイルをアップロードしてください", type=["xlsx", "xls", "csv"])
+    uploaded_file = st.file_uploader("エクセルまたはCSVファイルをアップロード", type=["xlsx", "xls", "csv"])
 
     if uploaded_file is not None:
         try:
@@ -81,16 +81,15 @@ with tab2:
                 
             st.success("ファイルを正常に読み込みました。")
             st.subheader("📋 データのプレビュー")
-            st.dataframe(df.head(5))
+            # スマホでも表が崩れないよう container width を活用
+            st.dataframe(df.head(5), use_container_width=True)
             
             columns = df.columns.tolist()
-            st.subheader("⚙️ 判定対象の「列（カラム）」を指定")
-            col1, col2 = st.columns(2)
+            st.subheader("⚙️ 判定対象の列を指定")
             
-            with col1:
-                text_column = st.selectbox("抽出テキスト（本文）の列を選択", options=columns)
-            with col2:
-                complement_column = st.selectbox("補語（対象）の列を選択（なければ「なし」を選択）", options=["なし"] + columns)
+            # スマホでカラムが横並びになりすぎて潰れないよう、縦に配置に変更
+            text_column = st.selectbox("抽出テキスト（本文）の列を選択", options=columns)
+            complement_column = st.selectbox("補語（対象）の列を選択（なければ「なし」）", options=["なし"] + columns)
                 
             comp_col_name = None if complement_column == "なし" else complement_column
             
@@ -108,7 +107,7 @@ with tab2:
                 st.bar_chart(summary)
                 
                 st.subheader("📝 判定結果一覧")
-                st.dataframe(df)
+                st.dataframe(df, use_container_width=True)
                 
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -116,7 +115,7 @@ with tab2:
                 processed_data = output.getvalue()
                 
                 st.download_button(
-                    label="📥 分類結果（Excel形式）をダウンロード",
+                    label="📥 分類結果（Excel）をダウンロード",
                     data=processed_data,
                     file_name="kodawaru_classified_result.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
