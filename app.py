@@ -5,13 +5,13 @@ import io
 # 画面タイトルの設定
 st.set_page_config(page_title="「こだわる」語義自動分類ツール", layout="centered")
 st.title("🔍 「こだわる」用例 自動分類ツール")
-st.write("BCCWJやその他のテキストデータから、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
+st.write("BCCWJ等のコーパスデータ（「|」区切り）やテキストから、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
 
 # --- 判定ロジック関数 ---
 def classify_text_string(text, complement=""):
-    # コーパスデータの「|（縦棒）」を除去してキーワード判定しやすくする
-    text = text.replace('|', '') if isinstance(text, str) else ""
-    complement = complement.replace('|', '') if isinstance(complement, str) else ""
+    # 欠損値対策と、「|（縦棒）」の完全除去
+    text = str(text).replace('|', '') if pd.notna(text) else ""
+    complement = str(complement).replace('|', '') if pd.notna(complement) else ""
     
     full_str = text + " " + complement
     
@@ -26,9 +26,9 @@ def classify_text_string(text, complement=""):
         return 'A（文句を言う）', '理屈や言いがかりに関するキーワードを検出'
         
     # 【ステップ3】語義C：近代的用法（ネガティブ・拘泥）
-    c_keywords = ['過去', '因習', '些細', '形式', '肩書', '立場', 'こだわりすぎ', '身動き', '拘泥', '囚われ', '縛られ', '否定的']
+    c_keywords = ['過去', '因習', '些細', '形式', '肩書', '立場', 'こだわりすぎ', 'こだわりてい', '身動き', '拘泥', '囚われ', '縛られ', '否定的', 'ばかり']
     if any(k in full_str for k in c_keywords):
-        return 'C（近代的用法・ネガティブ）', '否定的な執着や枠組み（因習・過去・形式等）を検出'
+        return 'C（近代的用法・ネガティブ）', '否定的な執着や枠組み（因習・過去・形式・否定的等）を検出'
         
     # 【ステップ4】語義D：現代的用法（ポジティブ・追求）
     d_keywords = ['品質', '味', '素材', '本物', '住まい', 'デザイン', 'こだわりたい', 'こだわりを深め', '追求', '厳選', '職人', '徹底', 'とことん']
@@ -96,10 +96,8 @@ with tab2:
             comp_col_name = None if complement_column == "なし" else complement_column
             
             if st.button("🚀 一括自動分類を実行する", key="file_button"):
-                results = df.apply(lambda row: classify_text_string(
-                    str(row[text_column]) if pd.notna(row[text_column]) else "",
-                    str(row[comp_col_name]) if (comp_col_name and pd.notna(row[comp_col_name])) else ""
-                ), axis=1)
+                # データフレームの各行に対して分類関数を適用
+                results = df.apply(lambda row: classify_text_string(row[text_column], row[comp_col_name] if comp_col_name else ""), axis=1)
                 
                 df['判定結果'] = [r[0] for r in results]
                 df['判定理由・メモ'] = [r[1] for r in results]
