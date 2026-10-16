@@ -66,7 +66,7 @@ with tab1:
             else:
                 st.info(f"**判定:** {res_result}")
                 
-            st.write(**理由・メモ:** {res_reason})
+            st.write(f"**理由・メモ:** {res_reason}")
 
 # 【タブ2】ファイル一括処理モード
 with tab2:
