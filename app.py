@@ -7,16 +7,14 @@ st.set_page_config(page_title="「こだわる」語義自動分類ツール", l
 st.title("🔍 「こだわる」用例 自動分類ツール")
 st.write("BCCWJ等のコーパスデータから、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
 
-# --- 判定ロジック関数 ---
-def classify_text_string(text, complement=""):
+# --- 判定ロジック関数（複数列の結合テキストに対応） ---
+def classify_text_string(combined_text):
     # 欠損値対策と、「|（縦棒）」・全角半角スペースの完全除去
-    clean_text = str(text).replace('|', '').replace(' ', ' ').strip() if pd.notna(text) else ""
-    clean_comp = str(complement).replace('|', '').replace(' ', ' ').strip() if (complement and pd.notna(complement)) else ""
+    clean_text = str(combined_text).replace('|', '').replace(' ', ' ').strip() if pd.notna(combined_text) else ""
     
-    # 検索対象文字列（本文＋補語）と、反転表記用の文字列を作成
-    full_str = clean_text + " " + clean_comp
-    reversed_str = full_str[::-1]
-    search_target = full_str + " " + reversed_str
+    # 検索対象文字列と、反転表記用の文字列を作成
+    reversed_str = clean_text[::-1]
+    search_target = clean_text + " " + reversed_str
 
     # 【ステップ1】語義B：つかえる、障る（物理的・身体的障礙）
     b_keywords = ['鍔', '脇指', '横つ腹', '喉', 'ひっかかる', 'つかえる', 'かかる', '障る']
@@ -29,12 +27,10 @@ def classify_text_string(text, complement=""):
         return 'A（文句を言う）', '理屈や言いがかりに関するキーワードを検出', clean_text
         
     # 【ステップ3】語義D：現代的用法（ポジティブ・追求、および否定形の包括表現）
-    # まず「こだわらない」「こだわらず」といった包括的用法をチェック
     if ('こだわらない' in clean_text or 'こだわらず' in clean_text or 'ないわだこ' in reversed_str or 'ずわだこ' in reversed_str):
         if any(k in search_target for k in ['ジャンル', 'ブランド', 'メーカー', '性別', '年齢', '国籍', '問わず', '関係なく', '一律']):
             return 'D（現代的用法・包括的）', '制限を設けない包括的・機能語的表現を検出', clean_text
 
-    # ポジティブな追求・品質重視に関するキーワード（語義D）
     d_keywords = [
         '品質', '味', '素材', '本物', '住まい', 'デザイン', 'こだわりたい', 'こだわりを深め', 
         '追求', '厳選', '職人', '徹底', 'とことん', '美味し', 'おいし', '上質', '独自', '洗練'
@@ -43,17 +39,15 @@ def classify_text_string(text, complement=""):
         return 'D（現代的用法・ポジティブ）', '肯定的な追求・品質重視に関するキーワードを検出', clean_text
 
     # 【ステップ4】語義C：近代的用法（ネガティブ・拘泥・囚われ）
-    # 上記のDに該当せず、否定的な文脈や枠組み・執着を示すキーワードがある場合
     c_keywords = [
         '過去', '因習', '些細', '形式', '肩書', '立場', 'こだわりすぎ', '身動き', 
         '拘泥', '囚われ', '縛られ', '否定的', 'ばかり', 'つまらぬ', '不要な', '悪癖',
         '泥拘', 'われ囚'
     ]
     if any(k in search_target for k in c_keywords) or 'こだわっ' in clean_text:
-        # 「こだわり」が単体で、特にポジティブ要素がない場合は基本C（ネガティブ・執着）へ寄せる
         return 'C（近代的用法・ネガティブ）', '否定的な執着や枠組み（因習・過去・形式・拘泥等）を検出', clean_text
 
-    # どのキーワードにも引っかからない場合のみ手動確認
+    # どのキーワードにも引っかからない場合
     return '要手動確認（C/D判別）', '明確なポジティブ・ネガティブの判定キーワードが不足しているため目視確認を推奨', clean_text
 
 
@@ -70,7 +64,8 @@ with tab1:
         if user_text.strip() == "":
             st.warning("テキストを入力してください。")
         else:
-            res_result, res_reason, cleaned = classify_text_string(user_text, user_complement)
+            combined_input = user_text + " " + user_complement
+            res_result, res_reason, cleaned = classify_text_string(combined_input)
             
             st.markdown("### 📌 判定結果")
             if "A" in res_result:
@@ -103,22 +98,30 @@ with tab2:
             st.dataframe(df.head(5), use_container_width=True)
             
             columns = df.columns.tolist()
-            st.subheader("⚙️ 判定対象の列を指定")
+            st.subheader("⚙️ 判定対象の列を 3つ まで指定")
+            st.write("※使用しない列がある場合は「なし」を選択してください。")
             
-            text_column = st.selectbox("抽出テキスト（本文）の列を選択", options=columns)
-            complement_column = st.selectbox("補語（対象）の列を選択（なければなし）", options=["なし"] + columns)
+            col_options = ["なし"] + columns
+            col_a = st.selectbox("判定対象の列 [1]", options=col_options, index=0)
+            col_b = st.selectbox("判定対象の列 [2]", options=col_options, index=0)
+            col_c = st.selectbox("判定対象の列 [3]", options=col_options, index=0)
                 
             if st.button("🚀 一括自動分類を実行する", key="file_button"):
                 results = []
                 for idx, row in df.iterrows():
-                    t_val = row[text_column]
-                    c_val = row[complement_column] if complement_column != "なし" else ""
-                    res = classify_text_string(t_val, c_val)
+                    # 選択された列のテキストを安全に取得して結合する
+                    texts_to_combine = []
+                    for c in [col_a, col_b, col_c]:
+                        if c != "なし" and pd.notna(row[c]):
+                            texts_to_combine.append(str(row[c]))
+                    
+                    combined_row_text = " ".join(texts_to_combine)
+                    res = classify_text_string(combined_row_text)
                     results.append(res)
                 
                 df['判定結果'] = [r[0] for r in results]
                 df['判定理由・メモ'] = [r[1] for r in results]
-                df['整形済みテキスト'] = [r[2] for r in results]
+                df['結合・整形済みテキスト'] = [r[2] for r in results]
                 
                 st.subheader("📊 分類結果の集計")
                 summary = df['判定結果'].value_counts()
