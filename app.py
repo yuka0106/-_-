@@ -9,11 +9,11 @@ st.write("BCCWJ等のコーパスデータ（「|」区切り）やテキスト�
 
 # --- 判定ロジック関数 ---
 def classify_text_string(text, complement=""):
-    # 欠損値対策と、「|（縦棒）」の完全除去
-    text = str(text).replace('|', '') if pd.notna(text) else ""
-    complement = str(complement).replace('|', '') if pd.notna(complement) else ""
+    # 確実に文字列に変換し、すべての「|（縦棒）」と空白を除去する
+    clean_text = str(text).replace('|', '').replace(' ', ' ').strip() if pd.notna(text) else ""
+    clean_comp = str(complement).replace('|', '').replace(' ', ' ').strip() if (complement and pd.notna(complement)) else ""
     
-    full_str = text + " " + complement
+    full_str = clean_text + " " + clean_comp
     
     # 【ステップ1】語義B：つかえる、障る（物理的・身体的障礙）
     b_keywords = ['鍔', '脇指', '横つ腹', '喉', 'ひっかかる', 'つかえる']
@@ -36,7 +36,7 @@ def classify_text_string(text, complement=""):
         return 'D（現代的用法・ポジティブ）', '肯定的な追求・品質重視に関するキーワードを検出'
         
     # 否定形で機能語化・包括的な使われ方（〜を問わず等）をしている場合
-    if ('こだわらない' in text or 'こだわらず' in text) and any(k in full_str for k in ['ジャンル', 'ブランド', 'メーカー', '性別', '年齢']):
+    if ('こだわらない' in clean_text or 'こだわらず' in clean_text) and any(k in full_str for k in ['ジャンル', 'ブランド', 'メーカー', '性別', '年齢']):
         return 'D（現代的用法・包括的）', '制限を設けない包括的・機能語的表現を検出'
 
     # 該当ルールがない場合
@@ -93,11 +93,14 @@ with tab2:
             text_column = st.selectbox("抽出テキスト（本文）の列を選択", options=columns)
             complement_column = st.selectbox("補語（対象）の列を選択（なければ「なし」）", options=["なし"] + columns)
                 
-            comp_col_name = None if complement_column == "なし" else complement_column
-            
             if st.button("🚀 一括自動分類を実行する", key="file_button"):
-                # データフレームの各行に対して分類関数を適用
-                results = df.apply(lambda row: classify_text_string(row[text_column], row[comp_col_name] if comp_col_name else ""), axis=1)
+                # 各行のデータを確実に抽出して関数に渡す処理
+                results = []
+                for idx, row in df.iterrows():
+                    t_val = row[text_column]
+                    c_val = row[complement_column] if complement_column != "なし" else ""
+                    res = classify_text_string(t_val, c_val)
+                    results.append(res)
                 
                 df['判定結果'] = [r[0] for r in results]
                 df['判定理由・メモ'] = [r[1] for r in results]
