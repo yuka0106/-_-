@@ -5,7 +5,7 @@ import io
 # 画面タイトルの設定
 st.set_page_config(page_title="「こだわる」語義自動分類ツール", layout="centered")
 st.title("🔍 「こだわる」用例 自動分類ツール")
-st.write("BCCWJ等のコーパスデータ（「|」区切り）やテキストから、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
+st.write("BCCWJ等のコーパスデータ（「|」区切り・反転表記対応）から、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
 
 # --- 判定ロジック関数 ---
 def classify_text_string(text, complement=""):
@@ -13,7 +13,11 @@ def classify_text_string(text, complement=""):
     clean_text = str(text).replace('|', '').replace(' ', ' ').strip() if pd.notna(text) else ""
     clean_comp = str(complement).replace('|', '').replace(' ', ' ').strip() if (complement and pd.notna(complement)) else ""
     
-    full_str = clean_text + " " + clean_comp
+    # 反転表記（文字や単語が逆順になっているケース）に対応するため、反転版の文字列も作成する
+    reversed_text = clean_text[::-1]
+    
+    # 通常の文字列と反転された文字列の両方を結合して検索対象にする
+    full_str = clean_text + " " + clean_comp + " " + reversed_text
     
     # 【ステップ1】語義B：つかえる、障る（物理的・身体的障礙）
     b_keywords = ['鍔', '脇指', '横つ腹', '喉', 'ひっかかる', 'つかえる']
@@ -36,7 +40,7 @@ def classify_text_string(text, complement=""):
         return 'D（現代的用法・ポジティブ）', '肯定的な追求・品質重視に関するキーワードを検出'
         
     # 否定形で機能語化・包括的な使われ方（〜を問わず等）をしている場合
-    if ('こだわらない' in clean_text or 'こだわらず' in clean_text) and any(k in full_str for k in ['ジャンル', 'ブランド', 'メーカー', '性別', '年齢']):
+    if ('こだわらない' in clean_text or 'こだわらず' in clean_text or 'いな変わどこ' in reversed_text or 'ずわだこ' in reversed_text) and any(k in full_str for k in ['ジャンル', 'ブランド', 'メーカー', '性別', '年齢']):
         return 'D（現代的用法・包括的）', '制限を設けない包括的・機能語的表現を検出'
 
     # 該当ルールがない場合
@@ -49,7 +53,7 @@ tab1, tab2 = st.tabs(["✍️ 直接入力して判定", "📁 ファイル一�
 # 【タブ1】直接入力モード
 with tab1:
     st.subheader("文章を直接入力して検証する")
-    user_text = st.text_area("「こだわる」を含む文例を入力してください（|付きでもOK）:", placeholder="例：自我の力弱い人だとか、自分の否定的な面にばかりこだわっている、など")
+    user_text = st.text_area("「こだわる」を含む文例を入力してください（|付きや反転表記もOK）:", placeholder="例：自我の力弱い人だとか、自分の否定的な面にばかりこだわっている、など")
     user_complement = st.text_input("補語や対象があれば入力してください（任意）:", placeholder="例：面")
     
     if st.button("判定する", key="direct_button"):
@@ -94,7 +98,6 @@ with tab2:
             complement_column = st.selectbox("補語（対象）の列を選択（なければ「なし」）", options=["なし"] + columns)
                 
             if st.button("🚀 一括自動分類を実行する", key="file_button"):
-                # 各行のデータを確実に抽出して関数に渡す処理
                 results = []
                 for idx, row in df.iterrows():
                     t_val = row[text_column]
