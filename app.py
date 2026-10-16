@@ -7,13 +7,13 @@ st.set_page_config(page_title="「こだわる」語義自動分類ツール", l
 st.title("🔍 「こだわる」用例 自動分類ツール")
 st.write("BCCWJ等のコーパスデータ（「|」区切り・反転表記対応）から、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
 
-# --- 判定ロジック関数 ---
+# --- 判定ロジック関数（整形済みテキストも一緒に返す） ---
 def classify_text_string(text, complement=""):
     # 確実に文字列に変換し、すべての「|（縦棒）」と空白を除去する
     clean_text = str(text).replace('|', '').replace(' ', ' ').strip() if pd.notna(text) else ""
     clean_comp = str(complement).replace('|', '').replace(' ', ' ').strip() if (complement and pd.notna(complement)) else ""
     
-    # 反転表記（文字や単語が逆順になっているケース）に対応するため、反転版の文字列も作成する
+    # 反転表記（文字や単語が逆順になっているケース）への対応
     reversed_text = clean_text[::-1]
     
     # 通常の文字列と反転された文字列の両方を結合して検索対象にする
@@ -22,29 +22,29 @@ def classify_text_string(text, complement=""):
     # 【ステップ1】語義B：つかえる、障る（物理的・身体的障礙）
     b_keywords = ['鍔', '脇指', '横つ腹', '喉', 'ひっかかる', 'つかえる']
     if any(k in full_str for k in b_keywords):
-        return 'B（つかえる・障る）', '物理的・身体的障礙に関するキーワードを検出'
+        return 'B（つかえる・障る）', '物理的・身体的障礙に関するキーワードを検出', clean_text
         
     # 【ステップ2】語義A：わずかなことに理屈をつけて文句を言う
     a_keywords = ['理屈', '文句', 'なんくせ', '言いがかり', '埒明けず']
     if any(k in full_str for k in a_keywords):
-        return 'A（文句を言う）', '理屈や言いがかりに関するキーワードを検出'
+        return 'A（文句を言う）', '理屈や言いがかりに関するキーワードを検出', clean_text
         
     # 【ステップ3】語義C：近代的用法（ネガティブ・拘泥）
     c_keywords = ['過去', '因習', '些細', '形式', '肩書', '立場', 'こだわりすぎ', 'こだわりてい', '身動き', '拘泥', '囚われ', '縛られ', '否定的', 'ばかり']
     if any(k in full_str for k in c_keywords):
-        return 'C（近代的用法・ネガティブ）', '否定的な執着や枠組み（因習・過去・形式・否定的等）を検出'
+        return 'C（近代的用法・ネガティブ）', '否定的な執着や枠組み（因習・過去・形式・否定的等）を検出', clean_text
         
     # 【ステップ4】語義D：現代的用法（ポジティブ・追求）
     d_keywords = ['品質', '味', '素材', '本物', '住まい', 'デザイン', 'こだわりたい', 'こだわりを深め', '追求', '厳選', '職人', '徹底', 'とことん']
     if any(k in full_str for k in d_keywords):
-        return 'D（現代的用法・ポジティブ）', '肯定的な追求・品質重視に関するキーワードを検出'
+        return 'D（現代的用法・ポジティブ）', '肯定的な追求・品質重視に関するキーワードを検出', clean_text
         
     # 否定形で機能語化・包括的な使われ方（〜を問わず等）をしている場合
     if ('こだわらない' in clean_text or 'こだわらず' in clean_text or 'いな変わどこ' in reversed_text or 'ずわだこ' in reversed_text) and any(k in full_str for k in ['ジャンル', 'ブランド', 'メーカー', '性別', '年齢']):
-        return 'D（現代的用法・包括的）', '制限を設けない包括的・機能語的表現を検出'
+        return 'D（現代的用法・包括的）', '制限を設けない包括的・機能語的表現を検出', clean_text
 
     # 該当ルールがない場合
-    return '要手動確認（C/D判別）', '文脈依存（伝統・方法等）のため目視確認を推奨'
+    return '要手動確認（C/D判別）', '文脈依存（伝統・方法等）のため目視確認を推奨', clean_text
 
 
 # --- タブの作成（① 直接入力、② ファイル一括処理） ---
@@ -60,7 +60,7 @@ with tab1:
         if user_text.strip() == "":
             st.warning("テキストを入力してください。")
         else:
-            res_result, res_reason = classify_text_string(user_text, user_complement)
+            res_result, res_reason, cleaned = classify_text_string(user_text, user_complement)
             
             st.markdown("### 📌 判定結果")
             if "A" in res_result:
@@ -75,6 +75,7 @@ with tab1:
                 st.info(f"**判定:** {res_result}")
                 
             st.write(f"**理由・メモ:** {res_reason}")
+            st.text(f"【確認用】整形済みテキスト（|除去後）: {cleaned}")
 
 # 【タブ2】ファイル一括処理モード
 with tab2:
@@ -105,14 +106,16 @@ with tab2:
                     res = classify_text_string(t_val, c_val)
                     results.append(res)
                 
+                # データフレームに新しい列として追加
                 df['判定結果'] = [r[0] for r in results]
                 df['判定理由・メモ'] = [r[1] for r in results]
+                df['整形済みテキスト(|除去)'] = [r[2] for r in results]
                 
                 st.subheader("📊 分類結果の集計")
                 summary = df['判定結果'].value_counts()
                 st.bar_chart(summary)
                 
-                st.subheader("📝 判定結果一覧")
+                st.subheader("📝 判定結果一覧（整形済みテキストも表示）")
                 st.dataframe(df, use_container_width=True)
                 
                 output = io.BytesIO()
