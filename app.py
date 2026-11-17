@@ -7,45 +7,60 @@ st.set_page_config(page_title="「こだわる」語義自動分類ツール", l
 st.title("🔍 「こだわる」用例 自動分類ツール")
 st.write("BCCWJ等のコーパスデータから、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
 
-# --- 判定ロジック関数（複数列の結合テキストに対応） ---
+# --- 判定ロジック関数（キーワード拡充・精度改善版） ---
 def classify_text_string(combined_text):
     clean_text = str(combined_text).replace('|', '').replace(' ', ' ').strip() if pd.notna(combined_text) else ""
     reversed_str = clean_text[::-1]
     search_target = clean_text + " " + reversed_str
 
     # 【ステップ1】語義B：つかえる、障る（物理的・身体的障礙）
-    b_keywords = ['鍔', '脇指', '横つ腹', '喉', 'ひっかかる', 'つかえる', 'かかる', '障る']
+    b_keywords = [
+        '鍔', '脇指', '横つ腹', '喉', 'ひっかかる', 'つかえる', 'かかる', '障る',
+        '引っかかる', '引っ掛かる', '支障'
+    ]
     if any(k in search_target for k in b_keywords):
         return 'B（つかえる・障る）', '物理的・身体的障礙に関するキーワードを検出', clean_text
-        
+
     # 【ステップ2】語義A：わずかなことに理屈をつけて文句を言う
-    a_keywords = ['理屈', '文句', 'なんくせ', '言いがかり', '埒明けず', '難癖']
+    a_keywords = [
+        '理屈', '文句', 'なんくせ', '言いがかり', '埒明けず', '難癖', '不平', '不満', '愚痴', '小言'
+    ]
     if any(k in search_target for k in a_keywords):
         return 'A（文句を言う）', '理屈や言いがかりに関するキーワードを検出', clean_text
-        
+
     # 【ステップ3】語義D：現代的用法（ポジティブ・追求、および否定形の包括表現）
     if ('こだわらない' in clean_text or 'こだわらず' in clean_text or 'ないわだこ' in reversed_str or 'ずわだこ' in reversed_str):
-        if any(k in search_target for k in ['ジャンル', 'ブランド', 'メーカー', '性別', '年齢', '国籍', '問わず', '関係なく', '一律']):
+        if any(k in search_target for k in [
+            'ジャンル', 'ブランド', 'メーカー', '性別', '年齢', '国籍', '問わず',
+            '関係なく', '一律', '種類', '形式', '方法', '場所', '時間'
+        ]):
             return 'D（現代的用法・包括的）', '制限を設けない包括的・機能語的表現を検出', clean_text
 
     d_keywords = [
-        '品質', '味', '素材', '食材', '本物', '住まい', 'デザイン', 'こだわりたい', 'こだわりを深め', 
-        '追求', '厳選', '職人', '徹底', 'とことん', '美味し', 'おいし', '上質', '独自', '洗練',
-        '絶品', '料理', '自家製', '手作り', 'プロ'
+        '品質', '味', '素材', '食材', '本物', '住まい', 'デザイン', 'こだわりたい', 'こだわりを深め',
+        '追求', '追及', '厳選', '職人', '徹底', 'とことん', '美味し', 'おいし', '上質', '独自',
+        '洗練', '絶品', '料理', '自家製', '手作り', 'プロ', '作る', '仕上げ', '表現', '演出',
+        '空間', '音', '色', '香り', '流儀', 'スタイル', '姿勢', '基準', 'ルール', '手間', '工夫',
+        '魅力', '人気', 'おすすめ', '注目', '本格'
     ]
     if any(k in search_target for k in d_keywords):
-        return 'D（現代的用法・ポジティブ）', '肯定的な追求・品質重視に関するキーワードを検出', clean_text
+        return 'D（現代的用法・ポジティブ）', '肯定的な追求・品質・表現重視に関するキーワードを検出', clean_text
 
     # 【ステップ4】語義C：近代的用法（ネガティブ・拘泥・囚われ）
     c_keywords = [
-        '過去', '因習', '些細', '形式', '肩書', '立場', 'こだわりすぎ', '身動き', 
+        '過去', '因習', '些細', '形式', '肩書', '立場', 'こだわりすぎ', '身動き',
         '拘泥', '囚われ', '縛られ', '否定的', 'ばかり', 'つまらぬ', '不要な', '悪癖',
-        '泥拘', 'われ囚'
+        '泥拘', 'われ囚', '古い', '昔', '慣習', '常識', '体裁', '見栄', 'プライド',
+        '意地', '執着', '固執', '偏見', '思い込み', '単なる', 'ただの', 'とらわれ', 'しばられ'
     ]
     if any(k in search_target for k in c_keywords):
         return 'C（近代的用法・ネガティブ）', '否定的な執着や枠組み（因習・過去・形式・拘泥等）を検出', clean_text
 
-    return '要手動確認（C/D判別）', '明確なポジティブ・ネガティブの判定キーワードが不足しているため目視確認を推奨', clean_text
+    # まだ「こだわる」系の語が含まれる場合、文脈が弱いものとして手動確認へ
+    if any(w in search_target for w in ['こだわ', 'わだこ']):
+        return '要手動確認（C/D判別）', '「こだわる」関連表現はあるが、C/Dを決める手がかりが弱いため目視確認を推奨', clean_text
+
+    return '要手動確認（C/D判別）', '判定キーワードが不足しているため目視確認を推奨', clean_text
 
 
 # --- タブの作成（① 直接入力、② ファイル一括処理） ---
@@ -56,14 +71,14 @@ with tab1:
     st.subheader("文章を直接入力して検証する")
     user_text = st.text_area("「こだわる」を含む文例を入力してください:", placeholder="例：プロが食材にこだわって作った絶品チャーハン")
     user_complement = st.text_input("補語や対象があれば入力してください（任意）:", placeholder="例：食材")
-    
+
     if st.button("判定する", key="direct_button"):
         if user_text.strip() == "":
             st.warning("テキストを入力してください。")
         else:
             combined_input = user_text + " " + user_complement
             res_result, res_reason, cleaned = classify_text_string(combined_input)
-            
+
             st.markdown("### 📌 判定結果")
             if "A" in res_result:
                 st.error(f"**判定:** {res_result}")
@@ -75,7 +90,7 @@ with tab1:
                 st.success(f"**判定:** {res_result}")
             else:
                 st.info(f"**判定:** {res_result}")
-                
+
             st.write(f"**理由・メモ:** {res_reason}")
             st.text(f"【確認用】整形済みテキスト: {cleaned}")
 
@@ -86,7 +101,10 @@ with tab2:
     if uploaded_file is not None:
         try:
             if uploaded_file.name.endswith('.csv'):
-                encodings_to_try = ['utf-8-sig', 'utf-8', 'cp932', 'shift_jis', 'utf-16', 'utf-16le']
+                encodings_to_try = [
+                    'utf-8-sig', 'utf-8', 'cp932', 'shift_jis',
+                    'euc-jp', 'utf-16', 'utf-16le', 'utf-16be'
+                ]
                 df = None
                 for enc in encodings_to_try:
                     try:
@@ -95,24 +113,28 @@ with tab2:
                         break
                     except Exception:
                         continue
+
                 if df is None:
-                    raise ValueError("対応していない文字コードのCSVファイルです。")
+                    uploaded_file.seek(0)
+                    raw_bytes = uploaded_file.read()
+                    decoded_text = raw_bytes.decode('utf-8', errors='replace')
+                    df = pd.read_csv(io.StringIO(decoded_text))
             else:
                 df = pd.read_excel(uploaded_file)
-                
+
             st.success("ファイルを正常に読み込みました。")
             st.subheader("📋 データのプレビュー")
             st.dataframe(df.head(5), use_container_width=True)
-            
+
             columns = df.columns.tolist()
             st.subheader("⚙️ 判定対象の列を 3つ まで指定")
             st.write("※使用しない列がある場合は「なし」を選択してください。")
-            
+
             col_options = ["なし"] + columns
             col_a = st.selectbox("判定対象の列 [1]", options=col_options, index=0)
             col_b = st.selectbox("判定対象の列 [2]", options=col_options, index=0)
             col_c = st.selectbox("判定対象の列 [3]", options=col_options, index=0)
-                
+
             if st.button("🚀 一括自動分類を実行する", key="file_button"):
                 results = []
                 for idx, row in df.iterrows():
@@ -120,33 +142,33 @@ with tab2:
                     for c in [col_a, col_b, col_c]:
                         if c != "なし" and pd.notna(row[c]):
                             texts_to_combine.append(str(row[c]))
-                    
+
                     combined_row_text = " ".join(texts_to_combine)
                     res = classify_text_string(combined_row_text)
                     results.append(res)
-                
+
                 df['判定結果'] = [r[0] for r in results]
                 df['判定理由・メモ'] = [r[1] for r in results]
                 df['結合・整形済みテキスト'] = [r[2] for r in results]
-                
+
                 st.subheader("📊 分類結果の集計")
                 summary = df['判定結果'].value_counts()
                 st.bar_chart(summary)
-                
+
                 st.subheader("📝 判定結果一覧")
                 st.dataframe(df, use_container_width=True)
-                
+
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     df.to_excel(writer, index=False, sheet_name='分類結果')
                 processed_data = output.getvalue()
-                
+
                 st.download_button(
                     label="📥 分類結果（Excel）をダウンロード",
                     data=processed_data,
                     file_name="kodawaru_classified_result.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
-                
+
         except Exception as e:
             st.error(f"エラーが発生しました: {e}")
