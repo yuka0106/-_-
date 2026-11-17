@@ -87,9 +87,17 @@ def classify_text_string(combined_text):
         "こだわらぬ", "こだわらず", "融通", "機会主義", "機會主義",
         "引いてしまう", "引いてしまふ", "嘗て", "かつて",
         "民主的でない", "民主的ではない", "ぢやない", "じゃない",
+        "こだわらなかつた", "こだわらなかった", "こだわらなかつたから", "こだわらなかったから",
+        "無事にすんだ", "無事に済んだ", "無事にすむ", "無事に済む",
+        "無事に納まった", "無事に収まった", "無事に治まった", "無事にをさまつた",
+        "事なきを得た", "事なきを得て", "穏便に",
     ]
     if any(k in search_target for k in c_keywords):
-        return "C（近代的用法・ネガティブ）", "否定的な執着や枠組み・拘泥・評価表現を検出", clean_text
+        return "C（近代的用法・ネガティブ）", "否定的な執着や枠組み・拘泥・回避表現を検出", clean_text
+
+    if any(neg in norm_str for neg in ["こだわらな", "こだわらず", "こだわらぬ"]):
+        if any(calm in search_target for calm in ["無事", "事なき", "穏便", "もめず", "揉めず"]):
+            return "C（近代的用法・ネガティブ）", "こだわらなかったことによる波風回避・無事の文脈を検出", clean_text
 
     if any(w in search_target for w in ["こだわ", "わだこ"]):
         return "要手動確認（C/D判別）", "「こだわる」関連表現はあるが、C/Dを決める手がかりが弱いため目視確認を推奨", clean_text
@@ -126,9 +134,9 @@ with tab1:
     st.subheader("文章を直接入力して検証する")
     user_text = st.text_area(
         "「こだわる」を含む文例を入力してください:",
-        placeholder="例：さういふ體裁に 拘はる のは、民主的でないと先生が云つたでせう。",
+        placeholder="例：笹子の両親はそれを気にしたが、そのことで正木が こだわら なかつたから無事にすんだ。",
     )
-    user_complement = st.text_input("補語や対象があれば入力してください（任意）:", placeholder="例：體裁")
+    user_complement = st.text_input("補語や対象があれば入力してください（任意）:", placeholder="例：無事にすんだ")
 
     if st.button("判定する", key="direct_button"):
         if not user_text.strip():
