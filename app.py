@@ -12,9 +12,7 @@ st.write("BCCWJ等のコーパスデータから、「こだわる」の使わ�
 def normalize_for_search(s: str) -> str:
     if not s:
         return ""
-    # 縦棒や空白を除去
     t = s.replace('|', '').replace(' ', '').replace(' ', '').strip()
-    # 歴史的仮名遣い・表記ゆれの簡易吸収（元の表記も残しつつ補助文字列を作る）
     kana_fixed = (
         t.replace('こだはつ', 'こだわっ')
          .replace('こだはら', 'こだわら')
@@ -250,35 +248,4 @@ with tab3:
             disp_cols = st.multiselect(
                 "画面に表示して読みたい列を選んでください（複数選択可）",
                 options=all_cols,
-                default=[all_cols[default_text_idx]] if all_cols else []
-            )
-
-        target_indices = mdf[mdf['判定結果'].astype(str).str.contains('要手動確認', na=True)].index.tolist()
-        total_rows = len(mdf)
-        remaining_count = len(target_indices)
-        done_count = total_rows - remaining_count
-
-        st.markdown(f"**進捗状況：** 全 {total_rows} 件中 **{done_count} 件完了** ／ 残り要手動確認 **{remaining_count} 件**")
-        st.progress(done_count / total_rows if total_rows > 0 else 1.0)
-
-        if remaining_count == 0:
-            st.success("🎉 すべての用例の分類が完了しました！下のボタンからExcelをダウンロードしてください。")
-        else:
-            pos = st.session_state.get('manual_pos', 0)
-            if pos >= remaining_count:
-                pos = 0
-                st.session_state['manual_pos'] = 0
-
-            current_row_idx = target_indices[pos]
-            row_data = mdf.loc[current_row_idx]
-
-            st.markdown(f"#### 📝 現在の用例（残り {remaining_count} 件中の {pos + 1} 件目 ／ 元データ {current_row_idx + 1} 行目）")
-
-            display_blocks = []
-            for col_name in disp_cols:
-                val = str(row_data[col_name]).replace('|', '') if pd.notna(row_data[col_name]) else ""
-                if val.strip():
-                    display_blocks.append(f"**【{col_name}】**\n{val}")
-
-            if display_blocks:
-                st.info("\n\
+                default=
