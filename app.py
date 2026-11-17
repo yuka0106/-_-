@@ -36,13 +36,17 @@ def classify_text_string(combined_text):
     reversed_str = norm_str[::-1]
     search_target = f"{clean_text} {norm_str} {reversed_str}"
 
+    # 【ステップ1】語義B：つかえる、障る（物理的・身体的・心内的な引っかかりや障り）
     b_keywords = [
         "鍔", "脇指", "横つ腹", "喉", "ひっかかる", "つかえる", "かかる", "障る",
         "引っかかる", "引っ掛かる", "支障",
+        "心にこだわる", "心に こだわる", "こだわるものがある", "こだはるものがある",
+        "憂欝な気持",
     ]
     if any(k in search_target for k in b_keywords):
-        return "B（つかえる・障る）", "物理的・身体的障礙に関するキーワードを検出", clean_text
+        return "B（つかえる・障る）", "物理的・身体的・心内的な引っかかりや障りに関するキーワードを検出", clean_text
 
+    # 【ステップ2】語義A：わずかなことに理屈をつけて文句を言う
     a_keywords = [
         "理屈", "文句", "なんくせ", "言いがかり", "埒明けず", "難癖",
         "不平", "不満", "愚痴", "小言",
@@ -50,6 +54,7 @@ def classify_text_string(combined_text):
     if any(k in search_target for k in a_keywords):
         return "A（文句を言う）", "理屈や言いがかりに関するキーワードを検出", clean_text
 
+    # 【ステップ3】語義D：現代的用法（ポジティブ・追求、および否定形の包括表現）
     if (
         "こだわらない" in norm_str
         or "こだわらず" in norm_str
@@ -76,6 +81,7 @@ def classify_text_string(combined_text):
     if any(k in search_target for k in d_keywords):
         return "D（現代的用法・ポジティブ）", "肯定的な追求・品質・表現重視に関するキーワードを検出", clean_text
 
+    # 【ステップ4】語義C：近代的用法（ネガティブ・拘泥・囚われ・枠組みへの批判や無頓着）
     c_keywords = [
         "過去", "因習", "些細", "形式", "肩書", "立場", "こだわりすぎ", "身動き",
         "拘泥", "囚われ", "縛られ", "否定的", "ばかり", "つまらぬ", "不要な", "悪癖",
@@ -91,9 +97,20 @@ def classify_text_string(combined_text):
         "無事にすんだ", "無事に済んだ", "無事にすむ", "無事に済む",
         "無事に納まった", "無事に収まった", "無事に治まった", "無事にをさまつた",
         "事なきを得た", "事なきを得て", "穏便に",
+        "幾度も", "何度も", "度々", "たびたび",
+        "こだわるようである", "こだわるようだが",
+        "がつかりした", "がっかりした", "ゆえんである", "もち出された",
+        "こだわらなくてもよかつた", "こだわらなくてもよかった",
+        "こだわらなくてもよい", "こだわらなくてもいい",
+        "強くこだわら", "あまりこだわら", "さほどこだわら",
+        "それほどこだわら", "一向にこだわら",
+        "こだわらない方", "こだわらないのだ", "こだわらないのです",
+        "こだわつ たことがないし", "こだわったことがないし", "それほどこだわつ",
+        "腹の立つ", "腹が立つ",
+        "文体", "荒削り", "すなおに", "素直に",
     ]
     if any(k in search_target for k in c_keywords):
-        return "C（近代的用法・ネガティブ）", "否定的な執着や枠組み・拘泥・回避表現を検出", clean_text
+        return "C（近代的用法・ネガティブ）", "否定的な執着や枠組み・拘泥・評価表現を検出", clean_text
 
     if any(neg in norm_str for neg in ["こだわらな", "こだわらず", "こだわらぬ"]):
         if any(calm in search_target for calm in ["無事", "事なき", "穏便", "もめず", "揉めず"]):
@@ -134,9 +151,9 @@ with tab1:
     st.subheader("文章を直接入力して検証する")
     user_text = st.text_area(
         "「こだわる」を含む文例を入力してください:",
-        placeholder="例：笹子の両親はそれを気にしたが、そのことで正木が こだわら なかつたから無事にすんだ。",
+        placeholder="例：私は心に こだわる ものがあるので、自分の満足はえられなかつた。",
     )
-    user_complement = st.text_input("補語や対象があれば入力してください（任意）:", placeholder="例：無事にすんだ")
+    user_complement = st.text_input("補語や対象があれば入力してください（任意）:", placeholder="例：心に")
 
     if st.button("判定する", key="direct_button"):
         if not user_text.strip():
@@ -243,104 +260,4 @@ with tab3:
 
     if "manual_df" in st.session_state:
         mdf = st.session_state["manual_df"]
-        all_cols = mdf.columns.tolist()
-
-        default_col = (
-            ["結合・整形済みテキスト"]
-            if "結合・整形済みテキスト" in all_cols
-            else (all_cols[:1] if all_cols else [])
-        )
-
-        with st.expander(
-            "⚙️ 表示する文章の列を設定（必要な場合のみ変更）",
-            expanded=("結合・整形済みテキスト" not in all_cols),
-        ):
-            disp_cols = st.multiselect(
-                "画面に表示して読みたい列を選んでください（複数選択可）",
-                options=all_cols,
-                default=default_col,
-            )
-
-        target_indices = mdf[
-            mdf["判定結果"].astype(str).str.contains("要手動確認", na=True)
-        ].index.tolist()
-        total_rows = len(mdf)
-        remaining_count = len(target_indices)
-        done_count = total_rows - remaining_count
-
-        st.markdown(
-            f"**進捗状況：** 全 {total_rows} 件中 **{done_count} 件完了** ／ 残り要手動確認 **{remaining_count} 件**"
-        )
-        st.progress(done_count / total_rows if total_rows > 0 else 1.0)
-
-        if remaining_count == 0:
-            st.success("🎉 すべての用例の分類が完了しました！下のボタンからExcelをダウンロードしてください。")
-        else:
-            pos = st.session_state.get("manual_pos", 0)
-            if pos >= remaining_count:
-                pos = 0
-                st.session_state["manual_pos"] = 0
-
-            current_row_idx = target_indices[pos]
-            row_data = mdf.loc[current_row_idx]
-
-            st.markdown(
-                f"#### 📝 現在の用例（残り {remaining_count} 件中の {pos + 1} 件目 ／ 元データ {current_row_idx + 1} 行目）"
-            )
-
-            display_blocks = []
-            for col_name in disp_cols:
-                val = str(row_data[col_name]).replace("|", "") if pd.notna(row_data[col_name]) else ""
-                if val.strip():
-                    display_blocks.append(f"【{col_name}】 {val}")
-
-            if display_blocks:
-                for blk in display_blocks:
-                    st.info(blk)
-            else:
-                st.info("（表示列が選択されていません。上の設定から文章の列を選択してください）")
-
-            st.write("▼ この用例の語義を選択してください（押すと自動で次へ進みます）：")
-            b1, b2 = st.columns(2)
-            b3, b4 = st.columns(2)
-
-            def apply_manual_label(label_text):
-                st.session_state["manual_df"].at[current_row_idx, "判定結果"] = label_text
-                st.session_state["manual_df"].at[current_row_idx, "判定理由・メモ"] = "手動分類"
-                st.rerun()
-
-            with b1:
-                if st.button("🅰️ A：文句を言う・理屈", use_container_width=True, key=f"btn_a_{current_row_idx}"):
-                    apply_manual_label("A（文句を言う）")
-            with b2:
-                if st.button("🅱️ B：つかえる・障る", use_container_width=True, key=f"btn_b_{current_row_idx}"):
-                    apply_manual_label("B（つかえる・障る）")
-            with b3:
-                if st.button("🇨 C：近代的・ネガティブ（拘泥）", use_container_width=True, key=f"btn_c_{current_row_idx}"):
-                    apply_manual_label("C（近代的用法・ネガティブ）")
-            with b4:
-                if st.button("🇩 D：現代的・ポジティブ（追求）", use_container_width=True, key=f"btn_d_{current_row_idx}"):
-                    apply_manual_label("D（現代的用法・ポジティブ）")
-
-            nav1, nav2, _ = st.columns([1, 1, 2])
-            with nav1:
-                if st.button("⬅️ 1つ前を見る", use_container_width=True, key="btn_prev"):
-                    st.session_state["manual_pos"] = (pos - 1) % remaining_count
-                    st.rerun()
-            with nav2:
-                if st.button("⏭️ 後回し（スキップ）", use_container_width=True, key="btn_skip"):
-                    st.session_state["manual_pos"] = (pos + 1) % remaining_count
-                    st.rerun()
-
-        st.divider()
-        manual_output = io.BytesIO()
-        with pd.ExcelWriter(manual_output, engine="xlsxwriter") as writer:
-            st.session_state["manual_df"].to_excel(writer, index=False, sheet_name="分類結果")
-
-        st.download_button(
-            label="📥 ここまでの分類結果（Excel）を保存・ダウンロード",
-            data=manual_output.getvalue(),
-            file_name="kodawaru_manual_classified.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
+        all_cols = mdf.columns
