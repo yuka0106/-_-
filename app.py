@@ -7,12 +7,9 @@ st.set_page_config(page_title="「こだわる」語義自動分類ツール", l
 st.title("🔍 「こだわる」用例 自動分類ツール")
 st.write("BCCWJ等のコーパスデータから、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
 
-# --- 判定ロジック関数（CとDの判定を適正化） ---
+# --- 判定ロジック関数（複数列の結合テキストに対応） ---
 def classify_text_string(combined_text):
-    # 欠損値対策と、「|（縦棒）」・全角半角スペースの完全除去
     clean_text = str(combined_text).replace('|', '').replace(' ', ' ').strip() if pd.notna(combined_text) else ""
-    
-    # 検索対象文字列と、反転表記用の文字列を作成
     reversed_str = clean_text[::-1]
     search_target = clean_text + " " + reversed_str
 
@@ -31,7 +28,6 @@ def classify_text_string(combined_text):
         if any(k in search_target for k in ['ジャンル', 'ブランド', 'メーカー', '性別', '年齢', '国籍', '問わず', '関係なく', '一律']):
             return 'D（現代的用法・包括的）', '制限を設けない包括的・機能語的表現を検出', clean_text
 
-    # ポジティブ・追求に関するキーワード（グルメ、品質、素材など）
     d_keywords = [
         '品質', '味', '素材', '食材', '本物', '住まい', 'デザイン', 'こだわりたい', 'こだわりを深め', 
         '追求', '厳選', '職人', '徹底', 'とことん', '美味し', 'おいし', '上質', '独自', '洗練',
@@ -41,7 +37,6 @@ def classify_text_string(combined_text):
         return 'D（現代的用法・ポジティブ）', '肯定的な追求・品質重視に関するキーワードを検出', clean_text
 
     # 【ステップ4】語義C：近代的用法（ネガティブ・拘泥・囚われ）
-    # ※単なる「こだわって」ではなく、明確な否定・執着ワードがある場合のみCにする
     c_keywords = [
         '過去', '因習', '些細', '形式', '肩書', '立場', 'こだわりすぎ', '身動き', 
         '拘泥', '囚われ', '縛られ', '否定的', 'ばかり', 'つまらぬ', '不要な', '悪癖',
@@ -50,7 +45,6 @@ def classify_text_string(combined_text):
     if any(k in search_target for k in c_keywords):
         return 'C（近代的用法・ネガティブ）', '否定的な執着や枠組み（因習・過去・形式・拘泥等）を検出', clean_text
 
-    # どのキーワードにも引っかからない場合
     return '要手動確認（C/D判別）', '明確なポジティブ・ネガティブの判定キーワードが不足しているため目視確認を推奨', clean_text
 
 
@@ -92,7 +86,17 @@ with tab2:
     if uploaded_file is not None:
         try:
             if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file)
+                encodings_to_try = ['utf-8-sig', 'utf-8', 'cp932', 'shift_jis', 'utf-16', 'utf-16le']
+                df = None
+                for enc in encodings_to_try:
+                    try:
+                        uploaded_file.seek(0)
+                        df = pd.read_csv(uploaded_file, encoding=enc)
+                        break
+                    except Exception:
+                        continue
+                if df is None:
+                    raise ValueError("対応していない文字コードのCSVファイルです。")
             else:
                 df = pd.read_excel(uploaded_file)
                 
