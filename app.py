@@ -5,7 +5,7 @@ import io
 # 画面タイトルの設定
 st.set_page_config(page_title="「こだわる」語義自動分類ツール", layout="centered")
 st.title("🔍 「こだわる」用例 自動分類ツール")
-st.write("BCCWJ等のコーパスデータから、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
+st.write("BCCWJ等のコーパスデータから、「こだわる」の使われ方をA/B/C/Dに自動・手動で仕分けします。")
 
 
 # --- 表記ゆれ・旧仮名補助の正規化関数 ---
@@ -74,7 +74,8 @@ def classify_text_string(combined_text):
         '拘泥', '囚われ', '縛られ', '否定的', 'ばかり', 'つまらぬ', '不要な', '悪癖',
         '泥拘', 'われ囚', '古い', '昔', '慣習', '常識', '体裁', '見栄', 'プライド',
         '意地', '執着', '固執', '偏見', '思い込み', '単なる', 'ただの', 'とらわれ', 'しばられ',
-        '観念', 'ていられない', 'られないほど', 'すら', 'さえ'
+        '観念', 'ていられない', 'られないほど', 'すら', 'さえ',
+        'べきではない', 'べきじゃない', 'べきではないか', 'こだわっているべき'
     ]
     if any(k in search_target for k in c_keywords):
         return 'C（近代的用法・ネガティブ）', '否定的な執着や枠組み・観念・拘泥表現を検出', clean_text
@@ -280,52 +281,4 @@ with tab3:
                     display_blocks.append(f"**【{col_name}】**\n{val}")
 
             if display_blocks:
-                st.info("\n\n".join(display_blocks))
-            else:
-                st.info("（表示列が選択されていません。上の設定から文章の列を選択してください）")
-
-            st.write("▼ この用例の語義を選択してください（押すと自動で次へ進みます）：")
-            b1, b2 = st.columns(2)
-            b3, b4 = st.columns(2)
-
-            def apply_manual_label(label_text):
-                st.session_state['manual_df'].at[current_row_idx, '判定結果'] = label_text
-                st.session_state['manual_df'].at[current_row_idx, '判定理由・メモ'] = '手動分類'
-                st.rerun()
-
-            with b1:
-                if st.button("🅰️ A：文句を言う・理屈", use_container_width=True, key=f"btn_a_{current_row_idx}"):
-                    apply_manual_label('A（文句を言う）')
-            with b2:
-                if st.button("🅱️ B：つかえる・障る", use_container_width=True, key=f"btn_b_{current_row_idx}"):
-                    apply_manual_label('B（つかえる・障る）')
-            with b3:
-                if st.button("🇨 C：近代的・ネガティブ（拘泥）", use_container_width=True, key=f"btn_c_{current_row_idx}"):
-                    apply_manual_label('C（近代的用法・ネガティブ）')
-            with b4:
-                if st.button("🇩 D：現代的・ポジティブ（追求）", use_container_width=True, key=f"btn_d_{current_row_idx}"):
-                    apply_manual_label('D（現代的用法・ポジティブ）')
-
-            nav1, nav2, _ = st.columns([1, 1, 2])
-            with nav1:
-                if st.button("⬅️ 1つ前を見る", use_container_width=True, key="btn_prev"):
-                    st.session_state['manual_pos'] = (pos - 1) % remaining_count
-                    st.rerun()
-            with nav2:
-                if st.button("⏭️ 後回し（スキップ）", use_container_width=True, key="btn_skip"):
-                    st.session_state['manual_pos'] = (pos + 1) % remaining_count
-                    st.rerun()
-
-        st.divider()
-        manual_output = io.BytesIO()
-        with pd.ExcelWriter(manual_output, engine='xlsxwriter') as writer:
-            st.session_state['manual_df'].to_excel(writer, index=False, sheet_name='分類結果')
-        manual_excel_data = manual_output.getvalue()
-
-        st.download_button(
-            label="📥 ここまでの分類結果（Excel）を保存・ダウンロード",
-            data=manual_excel_data,
-            file_name="kodawaru_manual_classified.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
+                st.info("\n\
