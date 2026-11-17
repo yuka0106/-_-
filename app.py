@@ -5,13 +5,35 @@ import io
 # 画面タイトルの設定
 st.set_page_config(page_title="「こだわる」語義自動分類ツール", layout="centered")
 st.title("🔍 「こだわる」用例 自動分類ツール")
-st.write("BCCWJ等のコーパスデータから、「こだわる」の使われ方をA/B/C/Dに自動・手動で仕分けします。")
+st.write("BCCWJ等のコーパスデータから、「こだわる」の使われ方をA/B/C/Dに自動仕分けします。")
+
+
+# --- 表記ゆれ・旧仮名補助の正規化関数 ---
+def normalize_for_search(s: str) -> str:
+    if not s:
+        return ""
+    # 縦棒や空白を除去
+    t = s.replace('|', '').replace(' ', '').replace(' ', '').strip()
+    # 歴史的仮名遣い・表記ゆれの簡易吸収（元の表記も残しつつ補助文字列を作る）
+    kana_fixed = (
+        t.replace('こだはつ', 'こだわっ')
+         .replace('こだはら', 'こだわら')
+         .replace('こだはり', 'こだわり')
+         .replace('こだはる', 'こだわる')
+         .replace('こだはれ', 'こだわれば')
+         .replace('ゐ', 'い')
+         .replace('ゑ', 'え')
+         .replace('觀念', '観念')
+    )
+    return f"{t} {kana_fixed}"
+
 
 # --- 判定ロジック関数 ---
 def classify_text_string(combined_text):
     clean_text = str(combined_text).replace('|', '').replace(' ', ' ').strip() if pd.notna(combined_text) else ""
-    reversed_str = clean_text[::-1]
-    search_target = clean_text + " " + reversed_str
+    norm_str = normalize_for_search(clean_text)
+    reversed_str = norm_str[::-1]
+    search_target = f"{clean_text} {norm_str} {reversed_str}"
 
     # 【ステップ1】語義B：つかえる、障る（物理的・身体的障礙）
     b_keywords = [
@@ -29,7 +51,7 @@ def classify_text_string(combined_text):
         return 'A（文句を言う）', '理屈や言いがかりに関するキーワードを検出', clean_text
 
     # 【ステップ3】語義D：現代的用法（ポジティブ・追求、および否定形の包括表現）
-    if ('こだわらない' in clean_text or 'こだわらず' in clean_text or 'ないわだこ' in reversed_str or 'ずわだこ' in reversed_str):
+    if ('こだわらない' in norm_str or 'こだわらず' in norm_str or 'ないわだこ' in reversed_str or 'ずわだこ' in reversed_str):
         if any(k in search_target for k in [
             'ジャンル', 'ブランド', 'メーカー', '性別', '年齢', '国籍', '問わず',
             '関係なく', '一律', '種類', '形式', '方法', '場所', '時間'
@@ -51,10 +73,11 @@ def classify_text_string(combined_text):
         '過去', '因習', '些細', '形式', '肩書', '立場', 'こだわりすぎ', '身動き',
         '拘泥', '囚われ', '縛られ', '否定的', 'ばかり', 'つまらぬ', '不要な', '悪癖',
         '泥拘', 'われ囚', '古い', '昔', '慣習', '常識', '体裁', '見栄', 'プライド',
-        '意地', '執着', '固執', '偏見', '思い込み', '単なる', 'ただの', 'とらわれ', 'しばられ'
+        '意地', '執着', '固執', '偏見', '思い込み', '単なる', 'ただの', 'とらわれ', 'しばられ',
+        '観念', 'ていられない', 'られないほど', 'すら', 'さえ'
     ]
     if any(k in search_target for k in c_keywords):
-        return 'C（近代的用法・ネガティブ）', '否定的な執着や枠組み（因習・過去・形式・拘泥等）を検出', clean_text
+        return 'C（近代的用法・ネガティブ）', '否定的な執着や枠組み・観念・拘泥表現を検出', clean_text
 
     if any(w in search_target for w in ['こだわ', 'わだこ']):
         return '要手動確認（C/D判別）', '「こだわる」関連表現はあるが、C/Dを決める手がかりが弱いため目視確認を推奨', clean_text
@@ -98,8 +121,8 @@ tab1, tab2, tab3 = st.tabs([
 # 【タブ1】直接入力モード
 with tab1:
     st.subheader("文章を直接入力して検証する")
-    user_text = st.text_area("「こだわる」を含む文例を入力してください:", placeholder="例：プロが食材にこだわって作った絶品チャーハン")
-    user_complement = st.text_input("補語や対象があれば入力してください（任意）:", placeholder="例：食材")
+    user_text = st.text_area("「こだわる」を含む文例を入力してください:", placeholder="例：觀念の高さなどに こだはつ てゐられないほど...")
+    user_complement = st.text_input("補語や対象があれば入力してください（任意）:", placeholder="例：觀念の高さ")
 
     if st.button("判定する", key="direct_button"):
         if user_text.strip() == "":
@@ -161,7 +184,6 @@ with tab2:
                 df['判定理由・メモ'] = [r[1] for r in results]
                 df['結合・整形済みテキスト'] = [r[2] for r in results]
 
-                # 手動分類タブでもそのまま引き継げるようにセッションに保存
                 st.session_state['manual_df'] = df.copy()
                 st.session_state['manual_file_id'] = f"batch_{uploaded_file.name}"
                 st.session_state['manual_pos'] = 0
@@ -219,7 +241,6 @@ with tab3:
         mdf = st.session_state['manual_df']
         all_cols = mdf.columns.tolist()
 
-        # 表示するテキスト列の選択（デフォルトで「結合・整形済みテキスト」があれば優先）
         default_text_idx = 0
         if '結合・整形済みテキスト' in all_cols:
             default_text_idx = all_cols.index('結合・整形済みテキスト')
@@ -231,7 +252,6 @@ with tab3:
                 default=[all_cols[default_text_idx]] if all_cols else []
             )
 
-        # 「要手動確認」を含む行のインデックスを取得
         target_indices = mdf[mdf['判定結果'].astype(str).str.contains('要手動確認', na=True)].index.tolist()
         total_rows = len(mdf)
         remaining_count = len(target_indices)
@@ -253,7 +273,6 @@ with tab3:
 
             st.markdown(f"#### 📝 現在の用例（残り {remaining_count} 件中の {pos + 1} 件目 ／ 元データ {current_row_idx + 1} 行目）")
 
-            # 用例テキストをカード風に大きく見やすく表示
             display_blocks = []
             for col_name in disp_cols:
                 val = str(row_data[col_name]).replace('|', '') if pd.notna(row_data[col_name]) else ""
@@ -265,7 +284,6 @@ with tab3:
             else:
                 st.info("（表示列が選択されていません。上の設定から文章の列を選択してください）")
 
-            # A / B / C / D 判定ボタン
             st.write("▼ この用例の語義を選択してください（押すと自動で次へ進みます）：")
             b1, b2 = st.columns(2)
             b3, b4 = st.columns(2)
@@ -273,7 +291,6 @@ with tab3:
             def apply_manual_label(label_text):
                 st.session_state['manual_df'].at[current_row_idx, '判定結果'] = label_text
                 st.session_state['manual_df'].at[current_row_idx, '判定理由・メモ'] = '手動分類'
-                # 分類すると対象リストから1件減るため、posはそのまま（次の要素が繰り上がる）
                 st.rerun()
 
             with b1:
@@ -289,7 +306,6 @@ with tab3:
                 if st.button("🇩 D：現代的・ポジティブ（追求）", use_container_width=True, key=f"btn_d_{current_row_idx}"):
                     apply_manual_label('D（現代的用法・ポジティブ）')
 
-            # スキップ・戻る操作
             nav1, nav2, _ = st.columns([1, 1, 2])
             with nav1:
                 if st.button("⬅️ 1つ前を見る", use_container_width=True, key="btn_prev"):
@@ -301,7 +317,6 @@ with tab3:
                     st.rerun()
 
         st.divider()
-        # いつでも途中経過をダウンロード可能にする
         manual_output = io.BytesIO()
         with pd.ExcelWriter(manual_output, engine='xlsxwriter') as writer:
             st.session_state['manual_df'].to_excel(writer, index=False, sheet_name='分類結果')
