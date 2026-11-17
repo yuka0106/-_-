@@ -138,7 +138,8 @@ def load_uploaded_dataframe(uploaded_file):
         raw_bytes = uploaded_file.read()
         decoded_text = raw_bytes.decode("utf-8", errors="replace")
         return pd.read_csv(io.StringIO(decoded_text))
-    return pd.read_excel(uploaded_file)
+    uploaded_file.seek(0)
+    return pd.read_excel(uploaded_file, sheet_name=0)
 
 
 tab1, tab2, tab3 = st.tabs([
@@ -246,18 +247,122 @@ with tab3:
     if manual_file is not None:
         file_token = f"{manual_file.name}_{manual_file.size}"
         if st.session_state.get("manual_file_id") != file_token:
-            try:
-                loaded_df = load_uploaded_dataframe(manual_file)
-                if "判定結果" not in loaded_df.columns:
-                    loaded_df["判定結果"] = "要手動確認（C/D判別）"
-                if "判定理由・メモ" not in loaded_df.columns:
-                    loaded_df["判定理由・メモ"] = ""
-                st.session_state["manual_df"] = loaded_df
-                st.session_state["manual_file_id"] = file_token
-                st.session_state["manual_pos"] = 0
-            except Exception as e:
-                st.error(f"ファイル読み込みエラー: {e}")
+            with st.spinner("ファイルを読み込んでいます..."):
+                try:
+                    loaded_df = load_uploaded_dataframe(manual_file)
+                    if "判定結果" not in loaded_df.columns:
+                        loaded_df["判定結果"] = "要手動確認（C/D判別）"
+                    if "判定理由・メモ" not in loaded_df.columns:
+                        loaded_df["判定理由・メモ"] = ""
+
+                    st.session_state["manual_df"] = loaded_df
+                    st.session_state["manual_file_id"] = file_token
+                    st.session_state["manual_pos"] = 0
+                except Exception as e:
+                    st.error(f"ファイル読み込みエラー: {e}")
+                    st.stop()
 
     if "manual_df" in st.session_state:
         mdf = st.session_state["manual_df"]
-        all_cols = mdf.columns
+        all_cols = mdf.columns.tolist()
+
+        default_col = (
+            ["結合・整形済みテキスト"]
+            if "結合・整形済みテキスト" in all_cols
+            else (all_cols[:1] if all_cols else [])
+        )
+
+        with st.expander(
+            "⚙️ 表示する文章の列を設定（必要な場合のみ変更）",
+            expanded=("結合・整形済みテキスト" not in all_cols),
+        ):
+            disp_cols = st.multiselect(
+                "画面に表示して読みたい列を選んでください（複数選択可）",
+                options=all_cols,
+                default=default_col,
+                key="manual_disp_cols",
+            )
+
+        target_indices = mdf[
+            mdf["判定結果"].astype(str).str.contains("要手動確認", na=True)
+        ].index.tolist()
+        total_rows = len(mdf)
+        remaining_count = len(target_indices)
+        done_count = total_rows - remaining_count
+
+        st.markdown(
+            f"**進捗状況：** 全 {total_rows} 件中 **{done_count} 件完了** ／ 残り要手動確認 **{remaining_count} 件**"
+        )
+        st.progress(done_count / total_rows if total_rows > 0 else 1.0)
+
+        if remaining_count == 0:
+            st.success("🎉 すべての用例の分類が完了しました！下のボタンからExcelをダウンロードしてください。")
+        else:
+            pos = st.session_state.get("manual_pos", 0)
+            if pos >= remaining_count:
+                pos = 0
+                st.session_state["manual_pos"] = 0
+
+            current_row_idx = target_indices[pos]
+            row_data = mdf.loc[current_row_idx]
+
+            st.markdown(
+                f"#### 📝 現在の用例（残り {remaining_count} 件中の {pos + 1} 件目 ／ 元データ {current_row_idx + 1} 行目）"
+            )
+
+            display_blocks = []
+            for col_name in disp_cols:
+                val = str(row_data[col_name]).replace("|", "") if pd.notna(row_data[col_name]) else ""
+                if val.strip():
+                    display_blocks.append(f"【{col_name}】 {val}")
+
+            if display_blocks:
+                for blk in display_blocks:
+                    st.info(blk)
+            else:
+                st.info("（表示列が選択されていません。上の設定から文章の列を選択してください）")
+
+            st.write("▼ この用例の語義を選択してください（押すと自動で次へ進みます）：")
+            b1, b2 = st.columns(2)
+            b3, b4 = st.columns(2)
+
+            def apply_manual_label(label_text):
+                st.session_state["manual_df"].at[current_row_idx, "判定結果"] = label_text
+                st.session_state["manual_df"].at[current_row_idx, "判定理由・メモ"] = "手動分類"
+                st.rerun()
+
+            with b1:
+                if st.button("🅰️ A：文句を言う・理屈", use_container_width=True, key=f"btn_a_{current_row_idx}"):
+                    apply_manual_label("A（文句を言う）")
+            with b2:
+                if st.button("🅱️ B：つかえる・障る", use_container_width=True, key=f"btn_b_{current_row_idx}"):
+                    apply_manual_label("B（つかえる・障る）")
+            with b3:
+                if st.button("🇨 C：近代的・ネガティブ（拘泥）", use_container_width=True, key=f"btn_c_{current_row_idx}"):
+                    apply_manual_label("C（近代的用法・ネガティブ）")
+            with b4:
+                if st.button("🇩 D：現代的・ポジティブ（追求）", use_container_width=True, key=f"btn_d_{current_row_idx}"):
+                    apply_manual_label("D（現代的用法・ポジティブ）")
+
+            nav1, nav2, _ = st.columns([1, 1, 2])
+            with nav1:
+                if st.button("⬅️ 1つ前を見る", use_container_width=True, key="btn_prev"):
+                    st.session_state["manual_pos"] = (pos - 1) % remaining_count
+                    st.rerun()
+            with nav2:
+                if st.button("⏭️ 後回し（スキップ）", use_container_width=True, key="btn_skip"):
+                    st.session_state["manual_pos"] = (pos + 1) % remaining_count
+                    st.rerun()
+
+        st.divider()
+        manual_output = io.BytesIO()
+        with pd.ExcelWriter(manual_output, engine="xlsxwriter") as writer:
+            st.session_state["manual_df"].to_excel(writer, index=False, sheet_name="分類結果")
+
+        st.download_button(
+            label="📥 ここまでの分類結果（Excel）を保存・ダウンロード",
+            data=manual_output.getvalue(),
+            file_name="kodawaru_manual_classified.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
